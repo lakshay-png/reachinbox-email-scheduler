@@ -1,3 +1,4 @@
+
 import { Worker, Job, DelayedError } from "bullmq";
 
 import { redisConnection } from "../config/redis";
@@ -5,6 +6,8 @@ import { env } from "../config/env";
 import { prisma } from "../lib/prisma";
 import { EMAIL_QUEUE_NAME } from "../queues/email.queue";
 import { checkAndReserveSendingSlot } from "../services/rate-limit.service";
+import { sendEmail } from "../services/email.service";
+
 interface EmailJobData {
   emailId: string;
 }
@@ -35,24 +38,33 @@ const worker = new Worker<EmailJobData>(
     }
 
     if (!email.sender.isActive) {
-      console.log(`Sender ${email.sender.id} is inactive.`);
+      await prisma.email.updateMany({
+        where: { id: emailId, status: "SCHEDULED" },
+        data: {
+          status: "FAILED",
+          failedAt: new Date(),
+          lastError: "Sender account is inactive.",
+        },
+      });
+
       return;
     }
 
-    // 2. Atomically claim the email.
+    // 2. Claim the email.
+    // PROCESSING is also allowed so BullMQ retries can recover
+    // emails left in this state after an interrupted attempt.
     const claim = await prisma.email.updateMany({
       where: {
         id: emailId,
-        status: "SCHEDULED",
+        status: { in: ["SCHEDULED", "PROCESSING"] },
       },
       data: {
         status: "PROCESSING",
-        attempts: { increment: 1 },
       },
     });
 
     if (claim.count === 0) {
-      console.log(`Email ${emailId} is already claimed or not eligible.`);
+      console.log(`Email ${emailId} is not eligible for processing.`);
       return;
     }
 
@@ -66,7 +78,6 @@ const worker = new Worker<EmailJobData>(
         email.sender.minDelayMs
       );
     } catch (error) {
-      // Release the claim if Redis is unavailable.
       await prisma.email.updateMany({
         where: { id: emailId, status: "PROCESSING" },
         data: { status: "SCHEDULED" },
@@ -75,16 +86,11 @@ const worker = new Worker<EmailJobData>(
       throw error;
     }
 
-    // 4. Release the claim and reschedule if rate-limited.
+    // 4. Reschedule if the sender is rate-limited.
     if (!rateLimit.allowed) {
       await prisma.email.updateMany({
-        where: {
-          id: emailId,
-          status: "PROCESSING",
-        },
-        data: {
-          status: "SCHEDULED",
-        },
+        where: { id: emailId, status: "PROCESSING" },
+        data: { status: "SCHEDULED" },
       });
 
       const delayMs = Math.max(rateLimit.retryAfterMs, 1000);
@@ -103,16 +109,69 @@ const worker = new Worker<EmailJobData>(
       throw new DelayedError();
     }
 
-    // 5. SMTP delivery will be implemented in Stage 5.
-    console.log(
-      `Email ${emailId} passed rate limiting and reached the worker.`
-    );
+    // 5. Count the actual sending attempt.
+    await prisma.email.update({
+      where: { id: emailId },
+      data: {
+        attempts: { increment: 1 },
+      },
+    });
 
-    return {
-      emailId,
-      status: "PROCESSING",
-      message: "Waiting for SMTP integration",
-    };
+    try {
+      // 6. Send the actual email through Ethereal SMTP.
+      const result = await sendEmail({
+        recipient: email.recipient,
+        subject: email.subject,
+        body: email.body,
+      });
+
+      // 7. Mark the email as successfully sent.
+      await prisma.email.update({
+        where: { id: emailId },
+        data: {
+          status: "SENT",
+          sentAt: new Date(),
+          lastError: null,
+        },
+      });
+
+      console.log(`Email ${emailId} sent successfully.`);
+      console.log(`Message ID: ${result.messageId}`);
+
+      if (result.previewUrl) {
+        console.log(`Ethereal Preview: ${result.previewUrl}`);
+      }
+
+      return {
+        emailId,
+        status: "SENT",
+        messageId: result.messageId,
+        previewUrl: result.previewUrl,
+      };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+
+      const maxAttempts = job.opts.attempts ?? 1;
+      const isFinalAttempt = job.attemptsMade + 1 >= maxAttempts;
+
+      // 8. Prepare the email for retry or mark it permanently failed.
+      await prisma.email.updateMany({
+        where: {
+          id: emailId,
+          status: "PROCESSING",
+        },
+        data: {
+          status: isFinalAttempt ? "FAILED" : "SCHEDULED",
+          lastError: errorMessage,
+          ...(isFinalAttempt ? { failedAt: new Date() } : {}),
+        },
+      });
+
+      console.error(`Email ${emailId} delivery failed: ${errorMessage}`);
+
+      throw error;
+    }
   },
   {
     connection: redisConnection,
@@ -149,4 +208,5 @@ async function shutdown() {
 
 process.on("SIGTERM", () => void shutdown());
 process.on("SIGINT", () => void shutdown());
+
 
