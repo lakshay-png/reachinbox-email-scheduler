@@ -1,0 +1,7 @@
+{
+  "senderId": "8ebd1cef-f6d5-4586-a23c-6f43e29aa019",
+  "recipient": "test@example.com",
+  "subject": "ReachInbox Scheduler Test",
+  "body": "Testing our persistent BullMQ email scheduler.",
+  "scheduledAt": "2026-11-01T13:09:14Z"
+}

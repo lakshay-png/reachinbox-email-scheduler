@@ -1,23 +1,48 @@
+
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 
-import healthRoutes from "./routes/health.routes";
+import emailRoutes from "./routes/email.routes";
+import { prisma } from "./lib/prisma";
 
 const app = express();
 
+// Middleware MUST run before routes
 app.use(helmet());
+app.use(cors());
 
-app.use(
-  cors({
-    origin: "http://localhost:5173",
-    credentials: true,
-  })
-);
-
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use("/api/health", healthRoutes);
+// Health check
+app.get("/api/health", (_req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "ReachInbox API is running",
+  });
+});
+
+// Database health check
+app.get("/api/health/db", async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+
+    res.status(200).json({
+      success: true,
+      message: "Database connection successful",
+    });
+  } catch (error) {
+    console.error("Database health check failed:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Database connection failed",
+    });
+  }
+});
+
+// Email routes
+app.use("/api/emails", emailRoutes);
 
 export default app;

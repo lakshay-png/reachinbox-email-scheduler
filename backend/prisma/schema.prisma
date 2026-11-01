@@ -14,6 +14,11 @@ enum EmailStatus {
   FAILED
 }
 
+enum OutboxStatus {
+  PENDING
+  DISPATCHED
+}
+
 model User {
   id        String   @id @default(uuid())
   googleId  String   @unique
@@ -57,6 +62,7 @@ model Email {
   scheduledAt    DateTime
   sentAt         DateTime?
   failedAt       DateTime?
+  outboxEvent    OutboxEvent?
 
   status         EmailStatus @default(SCHEDULED)
 
@@ -75,4 +81,20 @@ model Email {
   @@index([status, scheduledAt])
   @@index([senderId, status])
   @@index([recipient])
+}
+model OutboxEvent {
+  id          String       @id @default(uuid())
+
+  emailId     String       @unique
+  email       Email        @relation(fields: [emailId], references: [id], onDelete: Cascade)
+
+  status      OutboxStatus @default(PENDING)
+  attempts    Int          @default(0)
+  dispatchedAt DateTime?
+  lastError   String?      @db.Text
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([status, createdAt])
 }
