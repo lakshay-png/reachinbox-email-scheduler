@@ -2,13 +2,13 @@
 import { Router, Request, Response } from "express";
 
 import { prisma } from "../lib/prisma";
-import { devAuthMiddleware } from "../middleware/dev-auth.middleware";
+import { authMiddleware } from "../middleware/auth.middleware";
 
 const router = Router();
 
 router.get(
   "/",
-  devAuthMiddleware,
+  authMiddleware,
   async (_req: Request, res: Response): Promise<void> => {
     try {
       const userId = res.locals.userId as string;

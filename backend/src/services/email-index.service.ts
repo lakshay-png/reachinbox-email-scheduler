@@ -5,6 +5,7 @@ export const EMAIL_INDEX = "emails";
 
 interface IndexEmailInput {
   id: string;
+  userId: string;
   recipient: string;
   subject: string;
   body: string;
@@ -21,7 +22,17 @@ export async function createEmailIndex(): Promise<void> {
   });
 
   if (indexExists) {
-    console.log(`Elasticsearch index "${EMAIL_INDEX}" already exists.`);
+    // Ensure existing indexes also have the tenant ownership field.
+    await elasticsearchClient.indices.putMapping({
+      index: EMAIL_INDEX,
+      properties: {
+        userId: { type: "keyword" },
+      },
+    });
+
+    console.log(
+      `Elasticsearch index "${EMAIL_INDEX}" exists; userId mapping verified.`
+    );
     return;
   }
 
@@ -30,6 +41,7 @@ export async function createEmailIndex(): Promise<void> {
     mappings: {
       properties: {
         emailId: { type: "keyword" },
+        userId: { type: "keyword" },
         recipient: { type: "keyword" },
         subject: {
           type: "text",
@@ -58,6 +70,7 @@ export async function indexEmail(
     id: email.id,
     document: {
       emailId: email.id,
+      userId: email.userId,
       recipient: email.recipient,
       subject: email.subject,
       body: email.body,
@@ -75,6 +88,13 @@ export async function syncEmailToSearch(emailId: string): Promise<void> {
   try {
     const email = await prisma.email.findUnique({
       where: { id: emailId },
+      include: {
+        sender: {
+          select: {
+            userId: true,
+          },
+        },
+      },
     });
 
     if (!email) {
@@ -84,6 +104,7 @@ export async function syncEmailToSearch(emailId: string): Promise<void> {
 
     await indexEmail({
       id: email.id,
+      userId: email.sender.userId,
       recipient: email.recipient,
       subject: email.subject,
       body: email.body,
@@ -112,6 +133,13 @@ export async function backfillEmailsToSearch(): Promise<void> {
 
   while (true) {
     const emails = await prisma.email.findMany({
+      include: {
+        sender: {
+          select: {
+            userId: true,
+          },
+        },
+      },
       orderBy: {
         createdAt: "asc",
       },
@@ -132,6 +160,7 @@ export async function backfillEmailsToSearch(): Promise<void> {
       },
       {
         emailId: email.id,
+        userId: email.sender.userId,
         recipient: email.recipient,
         subject: email.subject,
         body: email.body,
@@ -157,9 +186,7 @@ export async function backfillEmailsToSearch(): Promise<void> {
         `${failedItems.length} email documents failed to index.`
       );
 
-      console.error(
-        JSON.stringify(failedItems, null, 2)
-      );
+      console.error(JSON.stringify(failedItems, null, 2));
 
       throw new Error("Elasticsearch bulk indexing encountered errors.");
     }

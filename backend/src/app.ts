@@ -1,26 +1,43 @@
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
+import cookieParser from "cookie-parser";
 
 import emailRoutes from "./routes/email.routes";
 import emailSearchRoutes from "./routes/email-search.routes";
+import authRoutes from "./routes/auth.routes";
 import { prisma } from "./lib/prisma";
 import slackRoutes from "./routes/slack.routes";
-import { bullBoardRouter } from "./config/bull-board";
 import senderRoutes from "./routes/sender.routes";
-import{
+import {
+  bullBoardRouter,
   bullBoardAuth,
 } from "./config/bull-board";
+import { env } from "./config/env";
 
 const app = express();
 
-// Middleware
+// Security and request middleware
 app.use(helmet());
-app.use(cors());
+
+app.use(
+  cors({
+    origin: env.FRONTEND_URL,
+    credentials: true,
+  })
+);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-// Slack OAuth routes
+app.use(cookieParser());
+
+// Authentication routes
+app.use("/api/auth", authRoutes);
+
+// Slack routes
 app.use("/api/slack", slackRoutes);
+
+// Sender routes
 app.use("/api/senders", senderRoutes);
 
 // Bull Board dashboard

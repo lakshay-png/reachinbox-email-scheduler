@@ -4,8 +4,11 @@ import { Router } from "express";
 import { z } from "zod";
 
 import { prisma } from "../lib/prisma";
+import { authMiddleware } from "../middleware/auth.middleware";
 
 const router = Router();
+
+router.use(authMiddleware);
 
 const emailListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -16,6 +19,7 @@ router.get(
   "/",
   async (req: Request, res: Response): Promise<void> => {
     try {
+      const userId = res.locals.userId as string;
       const validation = emailListQuerySchema.safeParse(req.query);
 
       if (!validation.success) {
@@ -29,8 +33,13 @@ router.get(
 
       const { page, limit } = validation.data;
 
+      const where: Prisma.EmailWhereInput = {
+        sender: { userId },
+      };
+
       const [emails, total, groupedCounts] = await Promise.all([
         prisma.email.findMany({
+          where,
           include: {
             sender: {
               select: {
@@ -40,20 +49,17 @@ router.get(
               },
             },
           },
-          orderBy: {
-            createdAt: "desc",
-          },
+          orderBy: { createdAt: "desc" },
           skip: (page - 1) * limit,
           take: limit,
         }),
 
-        prisma.email.count(),
+        prisma.email.count({ where }),
 
         prisma.email.groupBy({
           by: ["status"],
-          _count: {
-            _all: true,
-          },
+          where,
+          _count: { _all: true },
         }),
       ]);
 
@@ -84,7 +90,6 @@ router.get(
       });
     } catch (error) {
       console.error("Failed to retrieve emails:", error);
-
       res.status(500).json({
         success: false,
         message: "Failed to retrieve emails",
@@ -93,58 +98,35 @@ router.get(
   }
 );
 
-
-// Validation schema for scheduling an email
 const scheduleEmailSchema = z.object({
   senderId: z.string().uuid("Invalid sender ID"),
-
-  recipient: z
-    .string()
-    .email("Please provide a valid recipient email"),
-
-  subject: z
-    .string()
-    .min(1, "Subject is required")
-    .max(998, "Subject is too long"),
-
-  body: z
-    .string()
-    .min(1, "Email body cannot be empty"),
-
-  scheduledAt: z
-    .string()
-    .datetime({
-      offset: true,
-      message: "scheduledAt must be a valid ISO datetime with timezone",
-    }),
+  recipient: z.string().email("Please provide a valid recipient email"),
+  subject: z.string().min(1, "Subject is required").max(998),
+  body: z.string().min(1, "Email body cannot be empty"),
+  scheduledAt: z.string().datetime({
+    offset: true,
+    message: "scheduledAt must be a valid ISO datetime with timezone",
+  }),
 });
 
-// POST /api/emails/schedule
-// Schedule a new email
 router.post(
   "/schedule",
   async (req: Request, res: Response): Promise<void> => {
+    const userId = res.locals.userId as string;
+
     try {
-      // 1. Validate idempotency key
       const idempotencyKey = req.header("Idempotency-Key");
 
-      if (!idempotencyKey) {
+      if (!idempotencyKey || idempotencyKey.length > 255) {
         res.status(400).json({
           success: false,
-          message: "Idempotency-Key header is required",
+          message: !idempotencyKey
+            ? "Idempotency-Key header is required"
+            : "Idempotency-Key must not exceed 255 characters",
         });
         return;
       }
 
-      if (idempotencyKey.length > 255) {
-        res.status(400).json({
-          success: false,
-          message: "Idempotency-Key must not exceed 255 characters",
-        });
-        return;
-      }
-
-      // 2. Validate request body
       const validation = scheduleEmailSchema.safeParse(req.body);
 
       if (!validation.success) {
@@ -164,19 +146,20 @@ router.post(
         scheduledAt,
       } = validation.data;
 
-      const scheduledDate = new Date(scheduledAt);
-
-      // 3. Check whether this request was already processed
       const existingEmail = await prisma.email.findUnique({
-        where: {
-          idempotencyKey,
-        },
-        include: {
-          sender: true,
-        },
+        where: { idempotencyKey },
+        include: { sender: true },
       });
 
       if (existingEmail) {
+        if (existingEmail.sender.userId !== userId) {
+          res.status(409).json({
+            success: false,
+            message: "Idempotency key conflict",
+          });
+          return;
+        }
+
         res.status(200).json({
           success: true,
           message: "Email was already scheduled",
@@ -186,14 +169,15 @@ router.post(
         return;
       }
 
-      // 4. Verify that the sender exists and is active
-      const sender = await prisma.sender.findUnique({
+      const sender = await prisma.sender.findFirst({
         where: {
           id: senderId,
+          userId,
+          isActive: true,
         },
       });
 
-      if (!sender || !sender.isActive) {
+      if (!sender) {
         res.status(404).json({
           success: false,
           message: "Sender not found or inactive",
@@ -201,7 +185,6 @@ router.post(
         return;
       }
 
-      // 5. Create email and outbox event atomically
       const email = await prisma.$transaction(
         async (tx: Prisma.TransactionClient) => {
           const createdEmail = await tx.email.create({
@@ -210,7 +193,7 @@ router.post(
               recipient,
               subject,
               body,
-              scheduledAt: scheduledDate,
+              scheduledAt: new Date(scheduledAt),
               idempotencyKey,
               status: "SCHEDULED",
             },
@@ -227,7 +210,6 @@ router.post(
         }
       );
 
-      // 6. Return scheduled email
       res.status(202).json({
         success: true,
         message: "Email scheduled successfully",
@@ -235,23 +217,18 @@ router.post(
         data: email,
       });
     } catch (error: unknown) {
-  // Handle duplicate idempotency key
-  if (
-    error instanceof Error &&
-    "code" in error &&
-    error.code === "P2002"
-  ) {
-    try {
-      const idempotencyKey = req.header("Idempotency-Key");
-
-      if (idempotencyKey) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
         const existingEmail = await prisma.email.findUnique({
           where: {
-            idempotencyKey,
+            idempotencyKey: req.header("Idempotency-Key")!,
           },
+          include: { sender: true },
         });
 
-        if (existingEmail) {
+        if (existingEmail?.sender.userId === userId) {
           res.status(200).json({
             success: true,
             message: "Email was already scheduled",
@@ -260,21 +237,22 @@ router.post(
           });
           return;
         }
+
+        res.status(409).json({
+          success: false,
+          message: "Idempotency key conflict",
+        });
+        return;
       }
-    } catch (lookupError) {
-      console.error("Error retrieving duplicate email:", lookupError);
+
+      console.error("Error scheduling email:", error);
+
+      res.status(500).json({
+        success: false,
+        message: "Failed to schedule email",
+      });
     }
-  }
-
-  console.error("Error scheduling email:", error);
-
-  res.status(500).json({
-    success: false,
-    message: "Failed to schedule email",
-  });
-}
   }
 );
 
 export default router;
-

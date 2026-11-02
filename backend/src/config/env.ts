@@ -5,7 +5,14 @@ dotenv.config({
   path: path.resolve(__dirname, "../../.env"),
 });
 
-const requiredEnv = ["DATABASE_URL"] as const;
+const requiredEnv = [
+  "DATABASE_URL",
+  "GOOGLE_CLIENT_ID",
+  "GOOGLE_CLIENT_SECRET",
+  "GOOGLE_REDIRECT_URI",
+  "FRONTEND_URL",
+  "SESSION_SECRET",
+] as const;
 
 for (const key of requiredEnv) {
   if (!process.env[key]) {
@@ -34,16 +41,21 @@ export const env = {
     "ReachInbox Scheduler <no-reply@reachinbox.local>",
 
   ELASTICSEARCH_NODE:
-  process.env.ELASTICSEARCH_NODE || "http://localhost:9200",
+    process.env.ELASTICSEARCH_NODE || "http://localhost:9200",
 
   BULL_BOARD_USERNAME: process.env.BULL_BOARD_USERNAME || "",
   BULL_BOARD_PASSWORD: process.env.BULL_BOARD_PASSWORD || "",
 
-    SLACK_CLIENT_ID: process.env.SLACK_CLIENT_ID || "",
+  SLACK_CLIENT_ID: process.env.SLACK_CLIENT_ID || "",
   SLACK_CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET || "",
   SLACK_REDIRECT_URI:
     process.env.SLACK_REDIRECT_URI || "http://localhost:5000/api/slack/callback",
   SLACK_TOKEN_ENCRYPTION_KEY:
     process.env.SLACK_TOKEN_ENCRYPTION_KEY || "",
-};
 
+  GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID!,
+  GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET!,
+  GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI!,
+  FRONTEND_URL: process.env.FRONTEND_URL!,
+  SESSION_SECRET: process.env.SESSION_SECRET!,
+};

@@ -7,6 +7,13 @@ async function main() {
     console.log("Fetching an email from PostgreSQL...");
 
     const email = await prisma.email.findFirst({
+      include: {
+        sender: {
+          select: {
+            userId: true,
+          },
+        },
+      },
       orderBy: {
         createdAt: "desc",
       },
@@ -20,6 +27,7 @@ async function main() {
 
     await indexEmail({
       id: email.id,
+      userId: email.sender.userId,
       recipient: email.recipient,
       subject: email.subject,
       body: email.body,
@@ -37,9 +45,13 @@ async function main() {
       id: email.id,
     });
 
-    console.log("Indexed document:");
-    console.log(JSON.stringify(result._source, null, 2));
+    const document = result._source as { userId?: string } | undefined;
 
+    if (document?.userId !== email.sender.userId) {
+      throw new Error("Indexed userId does not match PostgreSQL ownership.");
+    }
+
+    console.log("Indexed document ownership verified.");
     console.log("EMAIL INDEXING TEST PASSED");
   } catch (error) {
     console.error("EMAIL INDEXING TEST FAILED:", error);

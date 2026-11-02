@@ -3,11 +3,16 @@ import { z } from "zod";
 
 import { elasticsearchClient } from "../config/elasticsearch";
 import { EMAIL_INDEX } from "../services/email-index.service";
+import { authMiddleware } from "../middleware/auth.middleware";
+import { estypes } from "@elastic/elasticsearch";
 
 const router = Router();
 
+router.use(authMiddleware);
+
 interface EmailDocument {
   emailId: string;
+  userId: string;
   recipient: string;
   subject: string;
   body: string;
@@ -39,6 +44,8 @@ router.get(
   "/",
   async (req: Request, res: Response): Promise<void> => {
     try {
+      const userId = res.locals.userId as string;
+
       const validation = searchSchema.safeParse(req.query);
 
       if (!validation.success) {
@@ -59,7 +66,11 @@ router.get(
         limit,
       } = validation.data;
 
-      const filters = [];
+      const filters: estypes.QueryDslQueryContainer[] = [
+       {
+         term: { userId },
+      },
+    ];
 
       if (status) {
         filters.push({

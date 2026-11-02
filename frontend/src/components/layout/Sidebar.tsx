@@ -2,6 +2,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Mail,
@@ -10,8 +11,9 @@ import {
   AlertCircle,
   Settings,
   Inbox,
-  ChevronDown,
+  LogOut,
 } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 
 const navigation = [
   { label: "Overview", href: "/", icon: LayoutDashboard },
@@ -22,6 +24,24 @@ const navigation = [
 ];
 
 export default function Sidebar() {
+  const { user, logout } = useAuth();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } finally {
+      router.replace("/login");
+    }
+  };
+
+  const initials = user?.name
+    ?.split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "U";
+
   return (
     <aside className="flex h-screen w-64 flex-col border-r border-slate-200 bg-white px-5 py-6">
       <div className="mb-10 flex items-center gap-3">
@@ -72,22 +92,38 @@ export default function Sidebar() {
           Settings
         </Link>
 
-        <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100 text-sm font-semibold text-indigo-700">
-              LK
+        <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">
+          {user?.avatar ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={user.avatar}
+              alt={user.name}
+              className="h-9 w-9 rounded-full object-cover"
+            />
+          ) : (
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-sm font-semibold text-indigo-700">
+              {initials}
             </div>
+          )}
 
-            <div>
-              <p className="text-sm font-semibold text-slate-800">
-                Demo User
-              </p>
-              <p className="text-xs text-slate-500">Free workspace</p>
-            </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-slate-800">
+              {user?.name || "User"}
+            </p>
+            <p className="truncate text-xs text-slate-500">
+              {user?.email || ""}
+            </p>
           </div>
-
-          <ChevronDown size={16} className="text-slate-400" />
         </div>
+
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="mt-3 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-red-50 hover:text-red-600"
+        >
+          <LogOut size={18} />
+          Sign out
+        </button>
       </div>
     </aside>
   );

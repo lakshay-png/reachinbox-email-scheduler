@@ -28,6 +28,7 @@ export async function apiRequest<T>(
       ...options.headers,
     },
     cache: "no-store",
+    credentials: "include",
   });
 
   const data = await response.json().catch(() => null);
@@ -43,3 +44,28 @@ export async function apiRequest<T>(
 
   return data as T;
 }
+
+
+export interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  avatar: string | null;
+}
+
+interface AuthResponse {
+  success: boolean;
+  data: AuthUser;
+}
+
+export async function getCurrentUser(): Promise<AuthUser> {
+  const response = await apiRequest<AuthResponse>("/api/auth/me");
+  return response.data;
+}
+
+export async function logoutUser(): Promise<void> {
+  await apiRequest("/api/auth/logout", {
+    method: "POST",
+  });
+}
+

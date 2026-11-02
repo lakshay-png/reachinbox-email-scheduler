@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { env } from "../config/env";
 import { prisma } from "../lib/prisma";
-import { devAuthMiddleware } from "../middleware/dev-auth.middleware";
+import { authMiddleware } from "../middleware/auth.middleware";
 import { listSlackChannels } from "../services/slack.service";
 import {
   createSlackOAuthState,
@@ -25,7 +25,7 @@ interface SlackOAuthResponse {
 
 router.get(
   "/connect",
-  devAuthMiddleware,
+  authMiddleware,
   async (_req: Request, res: Response): Promise<void> => {
     try {
       if (!env.SLACK_CLIENT_ID || !env.SLACK_REDIRECT_URI) {
@@ -210,7 +210,7 @@ router.get(
 // List available Slack channels
 router.get(
   "/channels",
-  devAuthMiddleware,
+  authMiddleware,
   async (_req: Request, res: Response): Promise<void> => {
     try {
       const userId = res.locals.userId as string;
@@ -234,7 +234,7 @@ router.get(
 // Save the notification channel
 router.post(
   "/channel",
-  devAuthMiddleware,
+  authMiddleware,
   async (req: Request, res: Response): Promise<void> => {
     try {
       const userId = res.locals.userId as string;
