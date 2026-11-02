@@ -7,6 +7,7 @@ import emailSearchRoutes from "./routes/email-search.routes";
 import { prisma } from "./lib/prisma";
 import slackRoutes from "./routes/slack.routes";
 import { bullBoardRouter } from "./config/bull-board";
+import senderRoutes from "./routes/sender.routes";
 import{
   bullBoardAuth,
 } from "./config/bull-board";
@@ -20,6 +21,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 // Slack OAuth routes
 app.use("/api/slack", slackRoutes);
+app.use("/api/senders", senderRoutes);
 
 // Bull Board dashboard
 app.use("/admin/queues", bullBoardAuth, bullBoardRouter);

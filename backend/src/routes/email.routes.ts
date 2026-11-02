@@ -7,6 +7,93 @@ import { prisma } from "../lib/prisma";
 
 const router = Router();
 
+const emailListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(10),
+});
+
+router.get(
+  "/",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const validation = emailListQuerySchema.safeParse(req.query);
+
+      if (!validation.success) {
+        res.status(400).json({
+          success: false,
+          message: "Invalid pagination parameters",
+          errors: validation.error.flatten(),
+        });
+        return;
+      }
+
+      const { page, limit } = validation.data;
+
+      const [emails, total, groupedCounts] = await Promise.all([
+        prisma.email.findMany({
+          include: {
+            sender: {
+              select: {
+                id: true,
+                email: true,
+                displayName: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+          skip: (page - 1) * limit,
+          take: limit,
+        }),
+
+        prisma.email.count(),
+
+        prisma.email.groupBy({
+          by: ["status"],
+          _count: {
+            _all: true,
+          },
+        }),
+      ]);
+
+      const counts = {
+        total,
+        scheduled: 0,
+        processing: 0,
+        sent: 0,
+        failed: 0,
+      };
+
+      for (const group of groupedCounts) {
+        counts[group.status.toLowerCase() as
+          "scheduled" | "processing" | "sent" | "failed"] =
+          group._count._all;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: emails,
+        stats: counts,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      });
+    } catch (error) {
+      console.error("Failed to retrieve emails:", error);
+
+      res.status(500).json({
+        success: false,
+        message: "Failed to retrieve emails",
+      });
+    }
+  }
+);
+
+
 // Validation schema for scheduling an email
 const scheduleEmailSchema = z.object({
   senderId: z.string().uuid("Invalid sender ID"),
