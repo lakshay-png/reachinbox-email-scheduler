@@ -1,4 +1,3 @@
-
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -6,18 +5,21 @@ import helmet from "helmet";
 import emailRoutes from "./routes/email.routes";
 import emailSearchRoutes from "./routes/email-search.routes";
 import { prisma } from "./lib/prisma";
+import { bullBoardRouter } from "./config/bull-board";
+import{
+  bullBoardAuth,
+} from "./config/bull-board";
 
 const app = express();
 
-// Middleware MUST run before routes
+// Middleware
 app.use(helmet());
 app.use(cors());
-
-app.use("/api/emails", emailRoutes);
-app.use("/api/emails/search", emailSearchRoutes);
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Bull Board dashboard
+app.use("/admin/queues", bullBoardAuth, bullBoardRouter);
 
 // Health check
 app.get("/api/health", (_req, res) => {
@@ -48,5 +50,6 @@ app.get("/api/health/db", async (_req, res) => {
 
 // Email routes
 app.use("/api/emails", emailRoutes);
+app.use("/api/emails/search", emailSearchRoutes);
 
 export default app;

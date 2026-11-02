@@ -35,5 +35,8 @@ export const env = {
 
   ELASTICSEARCH_NODE:
   process.env.ELASTICSEARCH_NODE || "http://localhost:9200",
+
+  BULL_BOARD_USERNAME: process.env.BULL_BOARD_USERNAME || "",
+  BULL_BOARD_PASSWORD: process.env.BULL_BOARD_PASSWORD || "",
 };
 
