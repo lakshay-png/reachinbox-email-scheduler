@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Mail,
@@ -12,12 +12,14 @@ import {
   Settings,
   Inbox,
   LogOut,
+  Users,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 const navigation = [
   { label: "Overview", href: "/", icon: LayoutDashboard },
   { label: "All Emails", href: "/emails", icon: Inbox },
+  { label: "Leads", href: "/leads", icon: Users },
   { label: "Scheduled", href: "/scheduled", icon: Clock3 },
   { label: "Sent", href: "/sent", icon: Send },
   { label: "Failed", href: "/failed", icon: AlertCircle },
@@ -26,6 +28,7 @@ const navigation = [
 export default function Sidebar() {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   const handleLogout = async () => {
     try {
@@ -35,12 +38,13 @@ export default function Sidebar() {
     }
   };
 
-  const initials = user?.name
-    ?.split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase() || "U";
+  const initials =
+    user?.name
+      ?.split(" ")
+      .map((part) => part[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() || "U";
 
   return (
     <aside className="flex h-screen w-64 flex-col border-r border-slate-200 bg-white px-5 py-6">
@@ -64,7 +68,11 @@ export default function Sidebar() {
       <nav className="flex-1 space-y-1">
         {navigation.map((item) => {
           const Icon = item.icon;
-          const active = item.href === "/";
+          const active =
+            item.href === "/"
+              ? pathname === "/"
+              : pathname === item.href ||
+                pathname.startsWith(`${item.href}/`);
 
           return (
             <Link
@@ -128,3 +136,4 @@ export default function Sidebar() {
     </aside>
   );
 }
+
