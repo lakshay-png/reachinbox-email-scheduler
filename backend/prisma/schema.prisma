@@ -27,6 +27,7 @@ model User {
   avatar    String?
 
   senders   Sender[]
+  slackIntegration SlackIntegration?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -97,4 +98,23 @@ model OutboxEvent {
   updatedAt   DateTime     @updatedAt
 
   @@index([status, createdAt])
+}
+
+model SlackIntegration {
+  id                 String   @id @default(uuid())
+
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  teamId             String
+  teamName           String?
+  botUserId          String?
+  encryptedBotToken  String   @db.Text
+  scopes             String   @db.Text
+  channelId          String?
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([teamId])
 }

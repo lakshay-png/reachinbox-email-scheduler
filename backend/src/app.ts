@@ -5,6 +5,7 @@ import helmet from "helmet";
 import emailRoutes from "./routes/email.routes";
 import emailSearchRoutes from "./routes/email-search.routes";
 import { prisma } from "./lib/prisma";
+import slackRoutes from "./routes/slack.routes";
 import { bullBoardRouter } from "./config/bull-board";
 import{
   bullBoardAuth,
@@ -17,6 +18,8 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+// Slack OAuth routes
+app.use("/api/slack", slackRoutes);
 
 // Bull Board dashboard
 app.use("/admin/queues", bullBoardAuth, bullBoardRouter);

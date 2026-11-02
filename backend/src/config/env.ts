@@ -38,5 +38,12 @@ export const env = {
 
   BULL_BOARD_USERNAME: process.env.BULL_BOARD_USERNAME || "",
   BULL_BOARD_PASSWORD: process.env.BULL_BOARD_PASSWORD || "",
+
+    SLACK_CLIENT_ID: process.env.SLACK_CLIENT_ID || "",
+  SLACK_CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET || "",
+  SLACK_REDIRECT_URI:
+    process.env.SLACK_REDIRECT_URI || "http://localhost:5000/api/slack/callback",
+  SLACK_TOKEN_ENCRYPTION_KEY:
+    process.env.SLACK_TOKEN_ENCRYPTION_KEY || "",
 };
 

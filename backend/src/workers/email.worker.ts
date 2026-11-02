@@ -8,6 +8,10 @@ import { prisma } from "../lib/prisma";
 import { EMAIL_QUEUE_NAME } from "../queues/email.queue";
 import { checkAndReserveSendingSlot } from "../services/rate-limit.service";
 import { sendEmail } from "../services/email.service";
+import {
+  notifySlackEmailSent,
+  notifySlackEmailFailed,
+} from "../services/slack-notification.service";
 
 interface EmailJobData {
   emailId: string;
@@ -39,18 +43,28 @@ const worker = new Worker<EmailJobData>(
     }
 
     if (!email.sender.isActive) {
-      await prisma.email.updateMany({
-        where: { id: emailId, status: "SCHEDULED" },
-        data: {
-          status: "FAILED",
-          failedAt: new Date(),
-          lastError: "Sender account is inactive.",
-        },
-      });
+  await prisma.email.updateMany({
+    where: { id: emailId, status: "SCHEDULED" },
+    data: {
+      status: "FAILED",
+      failedAt: new Date(),
+      lastError: "Sender account is inactive.",
+    },
+  });
 
-      await syncEmailToSearch(emailId);
-      return;
-    }
+  await syncEmailToSearch(emailId);
+
+  await notifySlackEmailFailed(
+    email.sender.userId,
+    {
+      recipient: email.recipient,
+      subject: email.subject,
+    },
+    "Sender account is inactive."
+  );
+
+  return;
+}
 
     // 2. Claim the email.
     // PROCESSING is also allowed so BullMQ retries can recover
@@ -139,6 +153,11 @@ const worker = new Worker<EmailJobData>(
 
       await syncEmailToSearch(emailId);
 
+      await notifySlackEmailSent(email.sender.userId, {
+       recipient: email.recipient,
+      subject: email.subject,
+      });
+
       console.log(`Email ${emailId} sent successfully.`);
       console.log(`Message ID: ${result.messageId}`);
 
@@ -174,9 +193,20 @@ const worker = new Worker<EmailJobData>(
 
       await syncEmailToSearch(emailId);
 
-      console.error(`Email ${emailId} delivery failed: ${errorMessage}`);
+      if (isFinalAttempt) {
+       await notifySlackEmailFailed(
+        email.sender.userId,
+        {
+          recipient: email.recipient,
+          subject: email.subject,
+        },
+        errorMessage
+      );
+    }
 
-      throw error;
+    console.error(`Email ${emailId} delivery failed: ${errorMessage}`);
+
+    throw error;
     }
   },
   {
