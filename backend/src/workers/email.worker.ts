@@ -1,5 +1,6 @@
 
 import { Worker, Job, DelayedError } from "bullmq";
+import { syncEmailToSearch } from "../services/email-index.service";
 
 import { redisConnection } from "../config/redis";
 import { env } from "../config/env";
@@ -47,6 +48,7 @@ const worker = new Worker<EmailJobData>(
         },
       });
 
+      await syncEmailToSearch(emailId);
       return;
     }
 
@@ -135,6 +137,8 @@ const worker = new Worker<EmailJobData>(
         },
       });
 
+      await syncEmailToSearch(emailId);
+
       console.log(`Email ${emailId} sent successfully.`);
       console.log(`Message ID: ${result.messageId}`);
 
@@ -167,6 +171,8 @@ const worker = new Worker<EmailJobData>(
           ...(isFinalAttempt ? { failedAt: new Date() } : {}),
         },
       });
+
+      await syncEmailToSearch(emailId);
 
       console.error(`Email ${emailId} delivery failed: ${errorMessage}`);
 

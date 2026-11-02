@@ -32,5 +32,8 @@ export const env = {
   SMTP_FROM:
     process.env.SMTP_FROM ||
     "ReachInbox Scheduler <no-reply@reachinbox.local>",
+
+  ELASTICSEARCH_NODE:
+  process.env.ELASTICSEARCH_NODE || "http://localhost:9200",
 };
 

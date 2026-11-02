@@ -13,6 +13,7 @@
     "dev:worker": "tsx watch src/workers/email.worker.ts"
   },
   "dependencies": {
+    "@elastic/elasticsearch": "^8.15.3",
     "@prisma/client": "^6.19.0",
     "bullmq": "^6.5.3",
     "cors": "^2.8.5",

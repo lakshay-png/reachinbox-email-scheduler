@@ -4,6 +4,7 @@ import cors from "cors";
 import helmet from "helmet";
 
 import emailRoutes from "./routes/email.routes";
+import emailSearchRoutes from "./routes/email-search.routes";
 import { prisma } from "./lib/prisma";
 
 const app = express();
@@ -11,6 +12,9 @@ const app = express();
 // Middleware MUST run before routes
 app.use(helmet());
 app.use(cors());
+
+app.use("/api/emails", emailRoutes);
+app.use("/api/emails/search", emailSearchRoutes);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
